@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>replit</title>
+    <link href={{ url_for('static', filename='style.css') }} rel="stylesheet" type="text/css" />
+  </head>
+
+  <body>
+    <div id="center">
+      <h2>Enter Notion Integration Key</h2>
+      <div id="initform_key">
+        <input type="text" name="key" id="key" required/>
+        <br />
+        <button id="submit" onclick="nextState()">Submit</button>
+      </div>
+    </div>
+    
+  </body>
+  <script>
+    function nextState() {
+      var key = document.getElementById("key").value;
+      base_url = {{ url_for("index")|tojson }}
+      let data = new FormData()
+      data.append("key", key)
+      fetch(base_url, {
+          "method": "POST",
+          "body": data,
+      }).then(response => console.log("Then: " + response))
+    }
+  </script>
+</html>
