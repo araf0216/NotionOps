@@ -8,6 +8,8 @@ app = Flask(__name__)
 def notionOps(op, intkey, dbTitle=None, data=None):
 
     def initConnection(intkey):
+        dbs = {}
+
         dbKey = None
         headers = {
           "Authorization": "Bearer " + intkey,
@@ -29,16 +31,17 @@ def notionOps(op, intkey, dbTitle=None, data=None):
         for db in res["results"]:
             curTitle = db["title"][0]["plain_text"]
             print(curTitle)
+            dbs[curTitle] = db["id"]
             if curTitle == dbTitle:
                 dbKey = db["id"]
                 break
 
         if dbKey is None:
-            print("No database found")
+            print("No match found to: ", dbTitle)
         else:
             print(dbKey)
             
-        return dbKey
+        return dbs
 
     def getDb(intkey, dbTitle, data):
         print("updateDb triggered")
@@ -69,7 +72,7 @@ def notionOps(op, intkey, dbTitle=None, data=None):
 
     match op:
         case "init":
-            initConnection(intkey)
+            return initConnection(intkey)
 
         case "get":
             if dbTitle and data:
@@ -83,18 +86,26 @@ def notionOps(op, intkey, dbTitle=None, data=None):
         #     else:
         #         print("Error: dbkey and data are required")
 
+@app.route('/api', methods=('GET', 'POST'))
+def api():
+    res = notionOps("init", key)
+    print(res)
+    # return res
+
 @app.route('/', methods=('GET', 'POST'))
 def index():
     key = "empty"
+    res = None
     if request.method == 'POST':
         key = request.form['key']
         print("Received Key: " + key)
 
         if len(key) > 0:
-            notionOps("init", key, "Accounts")
+            res = notionOps("init", key)
+            # print(res)
     
         
     return render_template('index.html')
 
 if __name__ == '__main__':
-  app.run(host='0.0.0.0', port=5000)
+  app.run(host='0.0.0.0', port=5000, debug=True)

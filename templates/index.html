@@ -4,30 +4,65 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
     <title>replit</title>
-    <link href={{ url_for('static', filename='style.css') }} rel="stylesheet" type="text/css" />
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet" type="text/css" />
   </head>
 
   <body>
+    
     <div id="center">
+      <!-- {% if res %}
+        {% for db in res %}
+        <button class="primaryButton">{{ db }}</button>
+        {% endfor %}
+      {% else %} -->
       <h2>Enter Notion Integration Key</h2>
       <div id="initform_key">
         <input type="text" name="key" id="key" required/>
         <br />
-        <button id="submit" onclick="nextState()">Submit</button>
+        <button class="primaryButton" id="submit" onclick="nextState()">Submit</button>
       </div>
+      <!-- {% endif %} -->
     </div>
+
     
   </body>
   <script>
+
     function nextState() {
-      var key = document.getElementById("key").value;
-      base_url = {{ url_for("index")|tojson }}
+      var key = document.getElementById("key").value
       let data = new FormData()
+      var base_url = '{{ url_for("index", _external=True)|tojson }}'
+      console.log("got base " + base_url)
       data.append("key", key)
       fetch(base_url, {
-          "method": "POST",
-          "body": data,
-      }).then(response => console.log("Then: " + response))
+          method: "POST",
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',  // For form data
+          },
+          body: data,
+      }).then(response => response.json)
+      .then(data => {
+        var centerDiv = document.getElementById("center");
+        centerDiv.replaceChildren();
+        var dbElements = document.createElement("div");
+        
+        // api call
+        var api_url = '{{ url_for("api", _external=True)|tojson }}';
+        console.log("tryna do api url type shi with " + api_url);
+        var api_data = null;
+        fetch(api_url, {
+          "method": "GET",
+        }).then(response => response.json)
+        .then(data => {
+          api_data = data;
+        });
+
+        console.log(api_data);
+        
+        var pk = "bruh we doin api inside of api type shi";
+        dbElements.innerHTML = "<p>" + pk + "</p>";
+        centerDiv.appendChild(dbElements);
+      })
     }
   </script>
 </html>
