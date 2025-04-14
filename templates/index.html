@@ -4,7 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
     <title>replit</title>
-    <link href={{ url_for('static', filename='style.css') }} rel="stylesheet" type="text/css" />
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet" type="text/css" />
+    <link href="{{ url_for('static', filename='flask.png') }}" rel="icon" type="image/png" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
   </head>
 
   <body>
@@ -12,22 +14,245 @@
       <h2>Enter Notion Integration Key</h2>
       <div id="initform_key">
         <input type="text" name="key" id="key" required/>
-        <br />
-        <button id="submit" onclick="nextState()">Submit</button>
+        <br /><!-- <br /> -->
+        <button class="primaryButton" id="submit" onclick="submitToken()">Submit</button>
       </div>
     </div>
     
   </body>
   <script>
-    function nextState() {
-      var key = document.getElementById("key").value;
-      base_url = {{ url_for("index")|tojson }}
-      let data = new FormData()
-      data.append("key", key)
-      fetch(base_url, {
-          "method": "POST",
-          "body": data,
-      }).then(response => console.log("Then: " + response))
+
+    // loading indicator element
+    const loader = document.createElement("div");
+    loader.classList.add("loader");
+
+    async function submitToken() {
+      try {
+        // data from current page state
+        const token = document.getElementById("key").value;
+        // does sending as formdata make the data more secure?
+        const data = new FormData();
+        data.append("key", token);
+
+        // set temporary load state
+        const centerDiv = document.getElementById("center");
+        centerDiv.replaceChildren();
+        const dbElems = document.createElement("div");
+        dbElems.appendChild(loader);
+        centerDiv.appendChild(dbElems);
+
+        const api_url = '{{ url_for("api") }}';
+
+        const api_response = await fetch(api_url, {
+          method: "POST",
+          body: data,
+        });
+
+        console.log("response complete");
+
+        const api_data = await api_response.json();
+        // api data retrieved ^
+
+        // prepare loaded data
+        var buttonElems = "";
+        for (let [dbName, dbKey] of Object.entries(api_data)) {
+          console.log(dbName);
+          buttonElems += "<button class='primaryButton' onclick='submitDBRows(\"" + token + "\", \"" + dbName + "\", \"" + dbKey + "\")'>" + dbName + "</button>";
+        }
+
+        // set page with loaded data
+        dbElems.innerHTML = "<div style='margin-right:10px;'>" + buttonElems + "</div>";
+        centerDiv.appendChild(dbElems);
+
+      } catch (error) {
+        console.error("Error during get DBs:", error);
+      }
+
+    }
+
+    async function submitDBRows(intKey, dbName, dbKey) {
+      try {
+        // set temporary loading state
+        const centerDiv = document.getElementById("center");
+        centerDiv.replaceChildren();
+
+        const rows = await selectRows(centerDiv, dbName);
+        console.log(rows);
+        data = {"db": dbKey, "int": intKey, "rows": rows};
+        headers = {"Content-Type": "application/json"};
+        
+        const api_url = '{{ url_for("api") }}';
+
+        const api_response = await fetch(api_url, {
+          method: "POST",
+          body: JSON.stringify(data),
+          headers: headers
+        });
+
+        const api_data = await api_response.json();
+
+        console.log("api response after db selection complete");
+
+        centerDiv.replaceChildren();
+        const propElems = document.createElement("div");
+        // prepare loaded data
+        var buttonElems = "";
+        for (let propData of api_data) {
+          let prop = Object.keys(propData)[0];
+          let propInfo = propData[prop];
+          // buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\")'>" + prop + "</button>";
+          buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
+        }
+
+        // set page with loaded data
+        propElems.innerHTML = "<div style='margin-right:10px;'>" + buttonElems + "</div>";
+        centerDiv.appendChild(propElems);
+        
+      } catch (error) {
+        console.error("Error during get submitted DB:", error);
+      }
+    }
+
+    async function selectRows(centerDiv, dbName) {
+
+      return new Promise((resolve) => {
+        centerDiv.replaceChildren();
+
+        const stickyElem = document.createElement("div");
+        stickyElem.classList.add("sticky");
+        centerDiv.appendChild(stickyElem);
+
+        const titleElem = document.createElement("h3");
+        stickyElem.appendChild(titleElem);
+
+        btnElems = document.createElement("div");
+        stickyElem.appendChild(btnElems);
+
+        // Container for input rows
+        const rowElems = document.createElement('div');
+        centerDiv.appendChild(rowElems);
+
+        // "Add Row" button
+        const addSpan = document.createElement("span");
+        const add = document.createElement('button');
+        add.classList.add("primaryButton");
+        add.textContent = 'Add Row';
+        add.onclick = () => addRow();
+        addSpan.appendChild(add);
+        btnElems.appendChild(addSpan);
+
+        // "Add Preset" button
+        const addPresetSpan = document.createElement("span");
+        const addPreset = document.createElement('button');
+        addPreset.classList.add("primaryButton");
+        addPreset.textContent = 'Add Murano Preset';
+        addPreset.onclick = async () => {
+          var presetUrl = '{{ url_for("file") }}';
+          var presetRes = await fetch(presetUrl, {
+            method: "GET"
+          });
+          var presetData = await presetRes.json();
+          rowElems.replaceChildren();
+          num = 0;
+          for (let presetName of presetData) {
+            addRow(presetName);
+          }
+        };
+        addPresetSpan.appendChild(addPreset);
+        btnElems.appendChild(addPresetSpan);
+
+        // "Submit Rows" button
+        const subSpan = document.createElement("span");
+        const submit = document.createElement('button');
+        submit.classList.add("primaryButton");
+        submit.textContent = 'Submit Rows';
+        submit.onclick = () => {
+          const inputs = rowElems.querySelectorAll('input[type="text"]');
+          const values = Array.from(inputs)
+            .map(input => input.value.trim())
+            .filter(val => val !== '');
+          if (values.length > 0) {
+            centerDiv.replaceChildren();
+            centerDiv.appendChild(loader);
+            resolve(values); // Return values out of the function via the Promise
+          }
+        };
+        subSpan.appendChild(submit);
+        btnElems.appendChild(subSpan);
+
+        // Helper to add a row
+        function addRow(name="") {
+          const row = document.createElement('div');
+          row.className = 'row';
+
+          const input = document.createElement('input');
+          input.id = "key";
+          input.type = 'text';
+          input.placeholder = 'Enter name';
+          if (name.trim() !== "") {
+            input.value = name.trim();
+          }
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.classList.add("primaryButton");
+          deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="red" class="bi bi-trash" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>';
+          deleteBtn.title = 'Delete Row';
+          deleteBtn.onclick = () => {
+            row.remove();
+            if (rowElems.firstChild != null && rowElems.firstChild.getBoundingClientRect().top > 300) {
+              console.log("unstick threshold met");
+              stickyElem.classList.remove("threshold");
+              rowElems.style.marginTop = "0px";
+            }
+            num--;
+            titleElem.innerHTML = "Database: <u>" + dbName + "</u> - " + num + " Rows Selected";
+          };
+
+          row.appendChild(input);
+          row.appendChild(deleteBtn);
+          rowElems.appendChild(row);
+          if (stickyElem.getBoundingClientRect().top < 100) {
+            console.log("threshold passed");
+            stickyElem.classList.add("threshold");
+            rowElems.style.marginTop = "250px";
+          }
+
+          num++;
+          titleElem.innerHTML = "Database: <u>" + dbName + "</u> - " + num + " Rows Selected";
+        }
+
+        // Start with one row
+        var num = 0;
+        addRow();
+      });
+
+    }
+
+    async function submitProp(prop, type) {
+      if (type !== "checkbox" && type !== "title") {
+        console.log("Currently Only Supporting Text and Checkbox Property Types");
+        return;
+      }
+
+      try {
+        const api_url = '{{ url_for("api") }}';
+
+        data = {"prop": prop};
+        headers = {"Content-Type": "application/json"};
+
+        const api_response = await fetch(api_url, {
+          method: "POST",
+          body: JSON.stringify(data),
+          headers: headers
+        });
+        
+        console.log("Selection of prop made: " + prop);
+
+        const api_data = await api_response.json();
+        // console.log(api_data);
+      } catch (error) {
+        console.error("Error during get Prop:", error);
+      }
     }
   </script>
 </html>

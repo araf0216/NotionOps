@@ -3,7 +3,7 @@
 * {
   font-family: 'Geist', sans-serif;
   font-weight: 400;
-  color: white;
+  color: #D4D4D4;
 }
 
 body,
@@ -12,21 +12,27 @@ html {
   height: 100%;
   /* Ensure body and html take full height */
   margin: 0;
+  overflow-y: auto;
   /* Remove default margin */
   display: flex;
   justify-content: center;
   /* Center horizontally */
   align-items: center;
   /* Center vertically */
-  background-color: black;
-  /* Set background color to black */
+  background-color: #191919;
+  /* Set background color to #191919 */
 }
 
 #center {
-  width: fit-content;
-  height: fit-content;
+  margin-top: 5%;
+  width: 100%;
+  height: max-content;
+  max-height: 100%;
   text-align: center;
-  /* Center text vertically */
+}
+
+.centerUpdate {
+  margin-top: 10%;
 }
 
 #center>div {
@@ -37,28 +43,66 @@ html {
   padding: 12px 16px;
   font-size: 16px;
   border-radius: 8px;
-  border: 1px solid white;
-  background-color: black;
-  color: white;
+  border: 1px solid #D4D4D4;
+  background-color: #191919;
+  color: #D4D4D4;
   cursor: text;
   width: fit-content;
   min-width: max(20vw, 400px);
   max-width: 32vw;
+  margin-bottom: 20px;
 }
 
 #key:focus {
   outline: none;
 }
 
-#submit {
-  margin-top: 5%;
+.primaryButton {
+  margin-bottom: 10px;
+  margin-left: 10px;
   padding: 12px 16px;
   font-size: 16px;
-  border-radius: 0.36vw;
-  border: 1px solid white;
-  background-color: white;
-  color: black;
+  /* border-radius: 0.36vw; */
+  border-radius: 10px;
+  border: 1px solid #D4D4D4;
+  background-color: #D4D4D4;
+  color: #191919;
   cursor: pointer;
   min-width: fit-content;
   width: 5vw;
+}
+
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.2); /* Faint full circle */
+  border-top: 4px solid #D4D4D4; /* Visible spinning arc */
+  border-radius: 50%;
+  animation: spin 1s ease-in-out infinite;
+  margin: 20px auto;
+  background: #191919; /* Optional, or remove if your page is already #191919 */
+}
+  
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.sticky {
+  position: relative;
+  top: 5%;
+  width: 100%;
+  margin-bottom: 20px;
+  background-color: #191919;
+}
+
+.threshold {
+  position: fixed;
+  top: 0;
+  padding-top: 100px;
+  padding-bottom: 20px;
+}
+
+.sticky>div {
+  height: min-content;
 }
