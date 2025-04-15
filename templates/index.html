@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>replit</title>
+    <title>Notion Ops</title>
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet" type="text/css" />
     <link href="{{ url_for('static', filename='flask.png') }}" rel="icon" type="image/png" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
@@ -229,8 +229,8 @@
     }
 
     async function submitProp(prop, type) {
-      if (type !== "checkbox" && type !== "title") {
-        console.log("Currently Only Supporting Text and Checkbox Property Types");
+      if (type !== "checkbox" && type !== "date") {
+        console.log("Currently Only Supporting Checkbox & Date Property Types");
         return;
       }
 
@@ -249,7 +249,99 @@
         console.log("Selection of prop made: " + prop);
 
         const api_data = await api_response.json();
-        // console.log(api_data);
+
+        const centerDiv = document.getElementById("center");
+        centerDiv.replaceChildren();
+        
+        // centerDiv.appendChild(loader);
+
+        if (type == "checkbox") {
+          checkboxSelected();
+        } else if (type == "date") {
+          await updateSelected("date");
+        }
+
+        async function checkboxSelected() {
+          const setChecked = document.createElement("button");
+          setChecked.classList.add("primaryButton");
+          setChecked.innerHTML = "Set to Checked";
+          setChecked.onclick = async () => {
+            await updateSelected("checked");
+          };
+
+          const setUnchecked = document.createElement("button");
+          setUnchecked.classList.add("primaryButton");
+          setUnchecked.innerHTML = "Set to Unchecked";
+          setUnchecked.onclick = async () => {
+            await updateSelected("unchecked");
+          };
+
+          centerDiv.appendChild(setChecked);
+          centerDiv.appendChild(setUnchecked);
+        }
+
+        async function updateSelected(value) {
+          // prop and type are both available here - remember!
+          centerDiv.replaceChildren();
+          
+          const confirmMessage = document.createElement("h3");
+          confirmMessage.innerHTML = "Confirm update to database?";
+          const confirmBtn = document.createElement("button");
+          confirmBtn.classList.add("primaryButton");
+          confirmBtn.innerHTML = "Confirm";
+          confirmBtn.onclick = async () => {
+            await actionUpdate(value);
+          };
+          const cancelBtn = document.createElement("button");
+          cancelBtn.classList.add("primaryButton");
+          cancelBtn.innerHTML = "Cancel";
+          cancelBtn.onclick = () => {};
+
+          centerDiv.replaceChildren();
+          centerDiv.appendChild(confirmMessage);
+          centerDiv.appendChild(cancelBtn);
+          centerDiv.appendChild(confirmBtn);
+        }
+
+        async function actionUpdate(update) {
+          // prop and type are both available
+          // console.log("triggering update call now");
+          centerDiv.replaceChildren();
+          centerDiv.appendChild(loader);
+
+          // run await api call - requires page id and that's IT!
+          const updateUrl = '{{ url_for("api") }}';
+
+          console.log(type + " update call initiated to " + update);
+
+          const upData = {"value": update};
+
+          const api_res = await fetch(api_url, {
+            method: "POST",
+            body: JSON.stringify(upData),
+            headers: headers,
+          });
+
+          if (api_res == null) return;
+
+          // parse await json returned from api call
+          const apiData = await api_res.json();
+          centerDiv.replaceChildren();
+
+          const finalMessage = document.createElement("h3");
+
+          if (apiData == "failed") {
+            console.log("Returned error at the end");
+            finalMessage.innerHTML = "Returned error at the end";
+            centerDiv.appendChild(finalMessage);
+            return;
+          }
+          
+          finalMessage.innerHTML = "Great Success!";
+          centerDiv.appendChild(finalMessage);
+
+        }
+
       } catch (error) {
         console.error("Error during get Prop:", error);
       }
