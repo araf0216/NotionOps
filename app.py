@@ -58,9 +58,23 @@ def notionOps(op, intkey, dbKey=None):
 
         payload = {
             "filter": {
-                "or": [],
+                "or": [
+                    # 200 - 2 ors
+                    # {
+                    #     "or": [100]
+                    # },
+                    # {
+                    #     "or": [100]
+                    # }
+                ],
             }
         }
+
+        chunkCap = 100
+        chunk = {
+            "or": [], # max capacity = chunkCap
+        }
+        chunksC = 0
 
         # populating payload with submitted name property values
         for row in rows:
@@ -70,7 +84,26 @@ def notionOps(op, intkey, dbKey=None):
                     "equals": row
                 }
             }
-            payload["filter"]["or"].append(row_filter)
+
+            # payload["filter"]["or"].append(row_filter)
+
+            # append row to current chunk
+            chunk["or"].append(row_filter)
+            # print(len(chunk["or"]))
+
+            # check if current chunk size is at max cap OR if final row reached
+            if (len(chunk["or"]) == chunkCap or row == rows[-1]):
+                # increment chunk number being added
+                chunksC += 1
+                # add chunk to the payload
+                print(f"Adding {chunksC}th Chunk - Length {len(chunk["or"])}")
+                payload["filter"]["or"].append(chunk)
+
+                # restore chunk to new empty chunk
+                chunk = None
+                chunk = {
+                    "or": [], # max capacity = chunkCap
+                }
 
         que_url = "https://api.notion.com/v1/databases/" + dbKey + "/query"
 
@@ -79,8 +112,8 @@ def notionOps(op, intkey, dbKey=None):
         queryRes = requests.post(que_url, headers=headers, json=payload).json()
 
         # for logging the pre-update state of data retrieved
-        with open("data.json", "w") as file:
-            json.dump(queryRes, file, indent=4)
+        # with open("data.json", "w") as file:
+        #     json.dump(queryRes, file, indent=4)
 
         db_url = "https://api.notion.com/v1/databases/" + dbKey
 
@@ -100,13 +133,17 @@ def notionOps(op, intkey, dbKey=None):
             return jsonify("failed")
         
         namesList = None
-        # if toUpdate == "date":
-        #     fpath = "Murano Names.xlsx"
+        if toUpdate == "date":
+            fpath = "Murano Names.xlsx"
 
-        #     fileDf = pd.read_excel(fpath)
-        #     namesList = fileDf.iloc[:, 1].tolist()
+            fileDf = pd.read_excel(fpath)
+            namesList = fileDf.iloc[:, 0].tolist()
+            datesList = fileDf.iloc[:, 1].tolist()
 
-        #     namesList = [name for name in namesList[:5] if name.strip() != ""]
+            nametoDate = {name: date for name, date in zip(namesList, datesList)}
+
+            # print(namesList)
+            return "failed"
 
         # queryRes contains the necessary rows and their page id's
         for res in queryRes["results"]:
@@ -126,19 +163,20 @@ def notionOps(op, intkey, dbKey=None):
                     val = True
                 case "unchecked":
                     val = False
-                # case "date":
-                #     val = namesList[res["properties"]["Name"]["title"]["text"]["content"]]
-                #     print("Date change to:", val)
+                case "date":
+                    val = nametoDate[res["properties"]["Name"]["title"]["text"]["content"]]
+                    # val = namesList[]
+                    # print("Date change to:", val)
 
             properties = {
                 "properties": {
                     selectedProp: val,
                 }
             }
-            print("triggered db PATCH itself with:", properties)
+            # print("triggered db PATCH itself with:", properties)
 
             res = requests.patch(rowUrl, headers=headers, json=properties).json()
-
+            # res = {}
 
             if res == {}:
                 print(res)
@@ -232,7 +270,6 @@ def api():
         # selectedProp = None
         return jsonify(res)
 
-    
     return jsonify({})
 
 @app.route('/', methods=('GET', 'POST'))
@@ -269,7 +306,7 @@ def file():
     fileDf = pd.read_excel(fpath)
     namesList = fileDf.iloc[:, 0].tolist()
 
-    return jsonify([name for name in namesList[:5] if name.strip() != ""])
+    return jsonify([name for name in namesList[:200] if name.strip() != ""])
 
 if __name__ == '__main__':
   app.run(host='0.0.0.0', port=5000)
