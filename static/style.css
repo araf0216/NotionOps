@@ -24,7 +24,7 @@ html {
 }
 
 #center {
-  margin-top: 5%;
+  /* margin-top: 5%; */
   width: 100%;
   height: max-content;
   max-height: 100%;

@@ -26,6 +26,36 @@
     const loader = document.createElement("div");
     loader.classList.add("loader");
 
+    async function progressTracker(message, messageElem) {
+      await new Promise((resolve, reject) => {
+        const progFetch = async () => {
+          try {
+            const progUrl = '{{ url_for("progress") }}';
+            // awaiting for completion of progress fetching
+            const progRes = await fetch(progUrl);
+            const progData = await progRes.json();
+
+            let progMessage = message + "... - " + Math.trunc(progData["value"] / progData["target"] * 100) + "%";
+            messageElem.innerHTML = progMessage + "<br/><br/>Closing this page will stop the process.";
+            
+            // decide what to do only after the current progress level is fetched
+            if (progData["status"] == "complete") {
+              console.log("Interval cleared");
+              resolve();
+            } else {
+              // rerun progress fetching only if not at completion yet
+              setTimeout(progFetch, 200);
+            }
+          } catch (error) {
+            // console.error("Error during progress fetching:", error);
+            reject(error);
+          }
+        };
+
+        progFetch();
+      });
+    }
+
     async function submitToken() {
       try {
         // data from current page state
@@ -41,9 +71,9 @@
         dbElems.appendChild(loader);
         centerDiv.appendChild(dbElems);
 
-        const api_url = '{{ url_for("api") }}';
+        const apiUrl = '{{ url_for("api") }}';
 
-        const api_response = await fetch(api_url, {
+        const api_response = await fetch(apiUrl, {
           method: "POST",
           body: data,
         });
@@ -81,17 +111,40 @@
         data = {"db": dbKey, "int": intKey, "rows": rows};
         headers = {"Content-Type": "application/json"};
         
-        const api_url = '{{ url_for("api") }}';
+        const apiUrl = '{{ url_for("api") }}';
 
-        const api_response = await fetch(api_url, {
+        const apiProgRes = await fetch(apiUrl, {
           method: "POST",
           body: JSON.stringify(data),
           headers: headers
         });
 
-        const api_data = await api_response.json();
+        const apiProg = await apiProgRes.json();
+        // check status returned is not unexpected
+        if (apiProg != "started") {
+          console.error("Returned error. Reload page and retry.");
+          // centerDiv.replaceChildren();
+          // finalMessage.innerHTML = "Returned error at the end. Reload page and retry.";
+          // centerDiv.appendChild(finalMessage);
+          return;
+        }
 
-        console.log("api response after db selection complete");
+        console.log("Got past retrieval progress status started check");
+
+        const progMessage = document.createElement("h3");
+        centerDiv.appendChild(progMessage);
+
+        await progressTracker("Retrieving rows", progMessage);
+
+        console.log("DB retrieval completion");
+
+        // receiving properties available in retrieved DB
+        const apiRes = await fetch(apiUrl, {
+          method: "GET",
+          headers: headers
+        });
+
+        const api_data = await apiRes.json();
 
         centerDiv.replaceChildren();
         const propElems = document.createElement("div");
@@ -100,7 +153,6 @@
         for (let propData of api_data) {
           let prop = Object.keys(propData)[0];
           let propInfo = propData[prop];
-          // buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\")'>" + prop + "</button>";
           buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
         }
 
@@ -252,8 +304,6 @@
 
         const centerDiv = document.getElementById("center");
         centerDiv.replaceChildren();
-        
-        // centerDiv.appendChild(loader);
 
         if (type == "checkbox") {
           checkboxSelected();
@@ -308,6 +358,8 @@
           // console.log("triggering update call now");
           centerDiv.replaceChildren();
           centerDiv.appendChild(loader);
+          const finalMessage = document.createElement("h3");
+          centerDiv.appendChild(finalMessage);
 
           // run await api call - requires page id and that's IT!
           const updateUrl = '{{ url_for("api") }}';
@@ -316,29 +368,33 @@
 
           const upData = {"value": update};
 
+          // initiate update request
           const api_res = await fetch(api_url, {
             method: "POST",
             body: JSON.stringify(upData),
             headers: headers,
           });
 
+          // check status returned is not empty
           if (api_res == null) return;
 
-          // parse await json returned from api call
           const apiData = await api_res.json();
-          centerDiv.replaceChildren();
 
-          const finalMessage = document.createElement("h3");
-
-          if (apiData == "failed") {
-            console.log("Returned error at the end");
-            finalMessage.innerHTML = "Returned error at the end";
+          
+          // check status returned is not unexpected
+          if (apiData != "started") {
+            console.log("Returned error at the end. Reload page and retry.");
+            centerDiv.replaceChildren();
+            finalMessage.innerHTML = "Returned error at the end. Reload page and retry.";
             centerDiv.appendChild(finalMessage);
             return;
           }
+
+          await progressTracker("Updating rows", finalMessage);
           
-          finalMessage.innerHTML = "Great Success!";
+          centerDiv.replaceChildren();
           centerDiv.appendChild(finalMessage);
+          finalMessage.innerHTML = "Great Success!";
 
         }
 
