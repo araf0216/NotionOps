@@ -13,7 +13,7 @@
     <div id="center">
       <h2>Enter Notion Integration Key</h2>
       <div id="initform_key">
-        <input type="text" name="key" id="key" required/>
+        <input type="text" name="key" id="key" class="primaryText" required/>
         <br /><!-- <br /> -->
         <button class="primaryButton" id="submit" onclick="submitToken()">Submit</button>
       </div>
@@ -27,7 +27,7 @@
     loader.classList.add("loader");
 
     async function progressTracker(message, messageElem) {
-      await new Promise((resolve, reject) => {
+      const finalStatus = await new Promise((resolve, reject) => {
         const progFetch = async () => {
           try {
             const progUrl = '{{ url_for("progress") }}';
@@ -40,8 +40,10 @@
             
             // decide what to do only after the current progress level is fetched
             if (progData["status"] == "complete") {
-              console.log("Interval cleared");
-              resolve();
+              // console.log("Interval cleared");
+              resolve("complete");
+            } else if (progData["status"] == "failed") {
+              resolve("failed");
             } else {
               // rerun progress fetching only if not at completion yet
               setTimeout(progFetch, 200);
@@ -54,6 +56,8 @@
 
         progFetch();
       });
+
+      return finalStatus;
     }
 
     async function submitToken() {
@@ -123,42 +127,22 @@
         // check status returned is not unexpected
         if (apiProg != "started") {
           console.error("Returned error. Reload page and retry.");
-          // centerDiv.replaceChildren();
-          // finalMessage.innerHTML = "Returned error at the end. Reload page and retry.";
-          // centerDiv.appendChild(finalMessage);
+          centerDiv.replaceChildren();
+
+          const errorMessage = document.createElement("h3");
+          errorMessage.innerHTML = "Returned error. Reload page and retry.";
+          centerDiv.appendChild(errorMessage);
           return;
         }
-
-        console.log("Got past retrieval progress status started check");
 
         const progMessage = document.createElement("h3");
         centerDiv.appendChild(progMessage);
 
-        await progressTracker("Retrieving rows", progMessage);
+        await progressTracker("Retrieving records", progMessage);
 
         console.log("DB retrieval completion");
 
-        // receiving properties available in retrieved DB
-        const apiRes = await fetch(apiUrl, {
-          method: "GET",
-          headers: headers
-        });
-
-        const api_data = await apiRes.json();
-
-        centerDiv.replaceChildren();
-        const propElems = document.createElement("div");
-        // prepare loaded data
-        var buttonElems = "";
-        for (let propData of api_data) {
-          let prop = Object.keys(propData)[0];
-          let propInfo = propData[prop];
-          buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
-        }
-
-        // set page with loaded data
-        propElems.innerHTML = "<div style='margin-right:10px;'>" + buttonElems + "</div>";
-        centerDiv.appendChild(propElems);
+        await selectProp(centerDiv);
         
       } catch (error) {
         console.error("Error during get submitted DB:", error);
@@ -177,7 +161,7 @@
         const titleElem = document.createElement("h3");
         stickyElem.appendChild(titleElem);
 
-        btnElems = document.createElement("div");
+        const btnElems = document.createElement("div");
         stickyElem.appendChild(btnElems);
 
         // Container for input rows
@@ -188,7 +172,7 @@
         const addSpan = document.createElement("span");
         const add = document.createElement('button');
         add.classList.add("primaryButton");
-        add.textContent = 'Add Row';
+        add.textContent = 'Add Record';
         add.onclick = () => addRow();
         addSpan.appendChild(add);
         btnElems.appendChild(addSpan);
@@ -209,6 +193,60 @@
           for (let presetName of presetData) {
             addRow(presetName);
           }
+
+          var isEditing = false;
+          const presetSpan = document.createElement("span");
+          const presetLimit = document.createElement("input");
+          const limitConfirm = document.createElement("button");
+
+          presetSpan.classList.add("row");
+          presetLimit.type = "number";
+          presetLimit.classList.add("primaryText");
+          presetLimit.placeholder = "Enter Number to Limit Preset Records";
+          limitConfirm.classList.add("primaryButton");
+          limitConfirm.classList.add("icon");
+          limitConfirm.innerHTML = '<svg width="24" height="24" fill="none" stroke="#191919" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M9.533 11.15A1.82 1.82 0 0 0 9 12.438V15h2.578c.483 0 .947-.192 1.289-.534l7.6-7.604a1.82 1.82 0 0 0 0-2.577l-.751-.751a1.82 1.82 0 0 0-2.578 0z"/><path d="M21 12c0 4.243 0 6.364-1.318 7.682S16.242 21 12 21s-6.364 0-7.682-1.318S3 16.242 3 12s0-6.364 1.318-7.682S7.758 3 12 3"/></svg>';
+          limitConfirm.onclick = () => {
+            const limit = presetLimit.value;
+            
+            presetSpan.remove();
+            isEditing = false;
+            if (rowElems.firstChild == null || rowElems.firstChild.getBoundingClientRect().top > 300) {
+              stickyElem.style.paddingTop = "0px";
+            }
+
+            if (limit.trim() == "") {
+              return;
+            }
+
+            rowElems.replaceChildren();
+            stickyElem.classList.remove("threshold");
+            rowElems.style.marginTop = "0px";
+            num = 0;
+            for (let presetName of presetData.slice(0, Number(limit))) {
+              addRow(presetName);
+            }
+          }
+          
+          presetSpan.appendChild(presetLimit);
+          presetSpan.appendChild(limitConfirm);
+
+          addPreset.textContent = "Edit Preset";
+          addPreset.onclick = () => {
+
+            isEditing = !isEditing;
+
+            if (!isEditing) {
+              presetSpan.remove();
+              if (rowElems.firstChild == null || rowElems.firstChild.getBoundingClientRect().top > 300) {
+                stickyElem.style.paddingTop = "0px";
+              }
+              return;
+            }
+            
+            stickyElem.appendChild(presetSpan);
+            stickyElem.style.paddingTop = "40px";
+          }
         };
         addPresetSpan.appendChild(addPreset);
         btnElems.appendChild(addPresetSpan);
@@ -217,7 +255,7 @@
         const subSpan = document.createElement("span");
         const submit = document.createElement('button');
         submit.classList.add("primaryButton");
-        submit.textContent = 'Submit Rows';
+        submit.textContent = 'Submit Records';
         submit.onclick = () => {
           const inputs = rowElems.querySelectorAll('input[type="text"]');
           const values = Array.from(inputs)
@@ -235,10 +273,10 @@
         // Helper to add a row
         function addRow(name="") {
           const row = document.createElement('div');
-          row.className = 'row';
+          row.classList.add("row");
 
           const input = document.createElement('input');
-          input.id = "key";
+          input.classList.add("primaryText");
           input.type = 'text';
           input.placeholder = 'Enter name';
           if (name.trim() !== "") {
@@ -247,30 +285,31 @@
 
           const deleteBtn = document.createElement('button');
           deleteBtn.classList.add("primaryButton");
-          deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="red" class="bi bi-trash" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>';
+          deleteBtn.classList.add("icon");
+          deleteBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="red" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="m18 9-.84 8.398c-.127 1.273-.19 1.909-.48 2.39a2.5 2.5 0 0 1-1.075.973C15.098 21 14.46 21 13.18 21h-2.36c-1.279 0-1.918 0-2.425-.24a2.5 2.5 0 0 1-1.076-.973c-.288-.48-.352-1.116-.48-2.389L6 9m7.5 6.5v-5m-3 5v-5m-6-4h4.615m0 0 .386-2.672c.112-.486.516-.828.98-.828h3.038c.464 0 .867.342.98.828l.386 2.672m-5.77 0h5.77m0 0H19.5"/></svg>';
           deleteBtn.title = 'Delete Row';
           deleteBtn.onclick = () => {
             row.remove();
             if (rowElems.firstChild != null && rowElems.firstChild.getBoundingClientRect().top > 300) {
-              console.log("unstick threshold met");
+              // console.log("unstick threshold met");
               stickyElem.classList.remove("threshold");
               rowElems.style.marginTop = "0px";
             }
             num--;
-            titleElem.innerHTML = "Database: <u>" + dbName + "</u> - " + num + " Rows Selected";
+            titleElem.innerHTML = "Database: <u>" + dbName + "</u> - " + num + "Records Selected";
           };
 
           row.appendChild(input);
           row.appendChild(deleteBtn);
           rowElems.appendChild(row);
           if (stickyElem.getBoundingClientRect().top < 100) {
-            console.log("threshold passed");
+            // console.log("threshold passed");
             stickyElem.classList.add("threshold");
             rowElems.style.marginTop = "250px";
           }
 
           num++;
-          titleElem.innerHTML = "Database: <u>" + dbName + "</u> - " + num + " Rows Selected";
+          titleElem.innerHTML = "Database: <u>" + dbName + "</u> - " + num + " Records Selected";
         }
 
         // Start with one row
@@ -278,6 +317,33 @@
         addRow();
       });
 
+    }
+
+    async function selectProp(centerDiv) {
+      headers = {"Content-Type": "application/json"};
+      const apiUrl = '{{ url_for("api") }}';
+
+      // receiving properties available in retrieved DB
+      const apiRes = await fetch(apiUrl, {
+        method: "GET",
+        headers: headers
+      });
+
+      const api_data = await apiRes.json();
+
+      centerDiv.replaceChildren();
+      const propElems = document.createElement("div");
+      // prepare loaded data
+      var buttonElems = "";
+      for (let propData of api_data) {
+        let prop = Object.keys(propData)[0];
+        let propInfo = propData[prop];
+        buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
+      }
+
+      // set page with loaded data
+      propElems.innerHTML = "<div style='margin-right:10px;'>" + buttonElems + "</div>";
+      centerDiv.appendChild(propElems);
     }
 
     async function submitProp(prop, type) {
@@ -289,7 +355,7 @@
       try {
         const api_url = '{{ url_for("api") }}';
 
-        data = {"prop": prop};
+        data = {"prop": prop, "type": type};
         headers = {"Content-Type": "application/json"};
 
         const api_response = await fetch(api_url, {
@@ -308,7 +374,7 @@
         if (type == "checkbox") {
           checkboxSelected();
         } else if (type == "date") {
-          await updateSelected("date");
+          dateSelected();
         }
 
         async function checkboxSelected() {
@@ -330,18 +396,52 @@
           centerDiv.appendChild(setUnchecked);
         }
 
+        async function dateSelected() {
+          const applyUniform = document.createElement("button");
+          applyUniform.classList.add("primaryButton");
+          applyUniform.innerHTML = "Apply Uniformly to All";
+          applyUniform.onclick = async () => {
+            // await updateSelected("date");
+            console.log("unimplemented");
+          };
+
+          const indiMapped = document.createElement("button");
+          indiMapped.classList.add("primaryButton");
+          indiMapped.innerHTML = "Apply Individually Mapped Values";
+          indiMapped.onclick = async () => {
+            applyUniform.innerHTML = "Upload Custom Structured File";
+            indiMapped.innerHTML = "Apply Murano Preset";
+
+            indiMapped.onclick = async () => {
+              await updateSelected("map");
+            };
+          };
+
+          centerDiv.appendChild(applyUniform);
+          centerDiv.appendChild(indiMapped);
+        }
+
         async function updateSelected(value) {
           // prop and type are both available here - remember!
           centerDiv.replaceChildren();
           
           const confirmMessage = document.createElement("h3");
           confirmMessage.innerHTML = "Confirm update to database?";
+
           const confirmBtn = document.createElement("button");
           confirmBtn.classList.add("primaryButton");
           confirmBtn.innerHTML = "Confirm";
           confirmBtn.onclick = async () => {
-            await actionUpdate(value);
+            await actionUpdate(value, true);
           };
+
+          const addNewBtn = document.createElement("button");
+          addNewBtn.classList.add("primaryButton");
+          addNewBtn.innerHTML = "Add Property";
+          addNewBtn.onclick = async () => {
+            await actionUpdate(value, false);
+          };
+
           const cancelBtn = document.createElement("button");
           cancelBtn.classList.add("primaryButton");
           cancelBtn.innerHTML = "Cancel";
@@ -350,23 +450,23 @@
           centerDiv.replaceChildren();
           centerDiv.appendChild(confirmMessage);
           centerDiv.appendChild(cancelBtn);
+          centerDiv.appendChild(addNewBtn);
           centerDiv.appendChild(confirmBtn);
         }
 
-        async function actionUpdate(update) {
-          // prop and type are both available
+        async function actionUpdate(update, finalProp) {
+          // property and property type are both available
           // console.log("triggering update call now");
           centerDiv.replaceChildren();
           centerDiv.appendChild(loader);
           const finalMessage = document.createElement("h3");
           centerDiv.appendChild(finalMessage);
-
-          // run await api call - requires page id and that's IT!
+          
           const updateUrl = '{{ url_for("api") }}';
 
-          console.log(type + " update call initiated to " + update);
+          console.log(type + " update call initiated to value " + update);
 
-          const upData = {"value": update};
+          const upData = {"value": update, "final": finalProp};
 
           // initiate update request
           const api_res = await fetch(api_url, {
@@ -380,21 +480,41 @@
 
           const apiData = await api_res.json();
 
-          
-          // check status returned is not unexpected
-          if (apiData != "started") {
-            console.log("Returned error at the end. Reload page and retry.");
-            centerDiv.replaceChildren();
-            finalMessage.innerHTML = "Returned error at the end. Reload page and retry.";
-            centerDiv.appendChild(finalMessage);
-            return;
+          console.log(apiData);
+
+          // if not final, then return to select property and new value
+          if (!finalProp) {
+            await selectProp(centerDiv);
           }
 
-          await progressTracker("Updating rows", finalMessage);
-          
-          centerDiv.replaceChildren();
-          centerDiv.appendChild(finalMessage);
-          finalMessage.innerHTML = "Great Success!";
+          // otherwise continue to performing update if final property has been selected
+          else {
+
+            // check status returned is not unexpected
+            if (apiData != "started") {
+              console.log("Returned error at the end. Reload page and retry.");
+              centerDiv.replaceChildren();
+              finalMessage.innerHTML = "Returned error at the end. Reload page and retry.";
+              centerDiv.appendChild(finalMessage);
+              return;
+            }
+
+            const progFinal = await progressTracker("Updating records", finalMessage);
+
+            // check status returned is not unexpected
+            if (progFinal != "complete") {
+              console.log("Returned error at the end. Reload page and retry.");
+              centerDiv.replaceChildren();
+              finalMessage.innerHTML = "Returned error at the end. Reload page and retry.";
+              centerDiv.appendChild(finalMessage);
+              return;
+            }
+            
+            centerDiv.replaceChildren();
+            centerDiv.appendChild(finalMessage);
+            finalMessage.innerHTML = "Great Success!";
+
+          }
 
         }
 

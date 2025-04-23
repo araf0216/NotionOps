@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import math
 import pandas as pd
 from flask import Flask, redirect, render_template, request, session, url_for, jsonify
 from threading import Thread, Event
@@ -10,11 +11,11 @@ app = Flask(__name__)
 integrationKey = None
 selectedDB = None
 selectedRows = None
-# rowNames = None
-selectedProp = None
+keysList = []
+selectedProp = [{}]
 retrieved = []
 databaseInfo = None
-toUpdate = None
+toUpdate = []
 
 progLevel = {"value": 0, "target": 0, "status": "idle"}
 
@@ -72,7 +73,7 @@ def notionOps(op, intkey, dbKey=None):
         global retrieved
         retrieved = []
         que_url = "https://api.notion.com/v1/databases/" + dbKey + "/query"
-        progLevel["target"] = max((len(rows) / 100), 1)
+        progLevel["target"] = max(math.ceil(len(rows) / 100), 1)
 
         # populating payload with submitted name property values
         for row in rows:
@@ -129,21 +130,23 @@ def notionOps(op, intkey, dbKey=None):
         global toUpdate
         global progLevel
 
-        if retrieved == None or toUpdate == None or selectedProp == None:
+        if retrieved == None or toUpdate == [] or selectedProp == []:
             return jsonify("failed")
         
-        # namesList = None
-        # if toUpdate == "date":
-        #     fpath = "Murano Names.xlsx"
+        global keysList
+        map = {}
+        if "map" in toUpdate:
+            fpath = "Murano Names.xlsx"
 
-        #     fileDf = pd.read_excel(fpath)
-        #     namesList = fileDf.iloc[:, 0].tolist()
-        #     datesList = fileDf.iloc[:, 1].tolist()
+            fileDf = pd.read_excel(fpath)
 
-        #     nametoDate = {name: date for name, date in zip(namesList, datesList)}
+            # future extension - user selects which property is key and which is value
+            valuesList = fileDf.iloc[:len(keysList), 1].tolist()
 
-        #     # print(namesList)
-        #     return "failed"
+            map = {key: value.strftime("%Y-%m-%d") for key, value in zip(keysList, valuesList)}
+
+            # print(map)
+            # return "failed"
         
         progLevel["target"] = len(retrieved)
 
@@ -159,22 +162,38 @@ def notionOps(op, intkey, dbKey=None):
                 "Notion-Version": "2022-06-28",
             }
 
-
-            match toUpdate:
-                case "checked":
-                    val = True
-                case "unchecked":
-                    val = False
-                # case "date":
-                #     val = nametoDate[res["properties"]["Name"]["title"]["text"]["content"]]
-                    # val = namesList[]
-                    # print("Date change to:", val)
-
             properties = {
                 "properties": {
-                    selectedProp: val,
+                    # selectedProp[0]["prop"]: val,
+                    # "Report Received Date": {
+                    #     "date": {
+                    #         "start": "1996-04-20"
+                    #     }
+                    # }
                 }
             }
+
+            for prop, val in zip(selectedProp, toUpdate):
+                match val:
+                    case "checked":
+                        val = {
+                            "checkbox": True
+                        }
+                        
+                    case "unchecked":
+                        val = {
+                            "checkbox": False
+                        }
+                        
+                    case "map":
+                        val = map[res["properties"]["Name"]["title"][0]["text"]["content"]]
+                        val = {
+                            "date": {
+                                "start": val
+                            }
+                        }
+
+                properties["properties"][prop["prop"]] = val
 
             res = requests.patch(rowUrl, headers=headers, json=properties).json()
 
@@ -188,8 +207,7 @@ def notionOps(op, intkey, dbKey=None):
 
             progLevel["value"] += 1
         
-        return "success"
-
+        return "complete"
 
 
 
@@ -214,13 +232,13 @@ def api():
 
     # receiving testing integration token from front end
     if request.method == 'POST' and integrationKey == None:
-        print("triggered POST and no IntKey")
+        # print("triggered POST and no IntKey")
         key = request.form['key']
-        print("Received Key: " + key)
+        # print("Received Key: " + key)
 
         if key.strip() != "":
             res = notionOps("init", key)
-            print("intkey confirmed with result:", res)
+            # print("intkey confirmed with result:", res)
             integrationKey = key
         
         return jsonify(res)
@@ -235,17 +253,19 @@ def api():
 
     # retrieving user-selected DB from api
     if request.method == 'POST' and selectedDB == None:
-        print("triggered submission of database AND rows selections")
+        # print("triggered submission of database AND rows selections")
         selectedDB = request.get_json()
         db = selectedDB
-        print("got selected db in api")
+        # print("got selected db in api")
         print(db)
 
         selectedRows = db["rows"]
 
         # compartmentalized executer of the retrieval operation
         def retrievalTask():
-            progLevel["status"] = "started"
+            global progLevel
+
+            progLevel = {"value": 0, "target": 1, "status": "started"}
             res = notionOps("get", db["int"], db["db"])
             progLevel["status"] = "complete"
             return res
@@ -258,35 +278,44 @@ def api():
         return jsonify("started")
 
     # gathering available properties from selected DB retrieved
-    elif request.method == 'GET' and selectedProp == None:
+    elif request.method == 'GET' and selectedProp[-1] == {}:
         res = databaseInfo
         propsRes = res["properties"]
         props = [{prop: propsRes[prop]} for prop in [p for p in propsRes][::-1]]
+        # if selectedProp[-1] != {}:
+        #     selectedProp.append({})
         return jsonify(props)
     
     # receiving and storing user-selected property to update
-    elif selectedProp == None:
+    elif selectedProp[-1] == {}:
         print("triggered property submission")
         prop = request.get_json()
-        selectedProp = prop["prop"]
-        res = databaseInfo["properties"][selectedProp]
+        selectedProp.pop()
+        selectedProp.append(prop)
+        res = databaseInfo["properties"][prop["prop"]]
         return jsonify(res)
     
     # submitting next state value of update to perform
-    elif selectedProp:
+    elif len(selectedProp) > 0:
         print("triggered update")
 
-        print("Selected property to update", selectedProp)
+        # print("Selected property to update", selectedProp["prop"])
 
         value = request.get_json()
-        toUpdate = value["value"]
-        print("Selected update to the property", value["value"])
+        toUpdate.append(value["value"])
+        if value["final"] != None and value["final"] == False:
+            print("Prop select continues")
+            selectedProp.append({})
+            return jsonify("anotha one")
+        # print(f"Selected update to the property {toUpdate}<{selectedProp["type"]}>")
 
         # compartmentalized executer of the actual update operation
         def updateTask():
-            progLevel["status"] = "started"
+            global progLevel
+            
+            progLevel = {"value": 0, "target": 1, "status": "started"}
             res = notionOps("update", key)
-            progLevel["status"] = "complete"
+            progLevel["status"] = res
             return res
 
         # pass the update executer into a thread for update task to keep running in the background
@@ -294,7 +323,9 @@ def api():
         updateThread = Thread(target=updateTask)
         updateThread.start()
 
-        return jsonify("started")
+        print("Status right before return", progLevel["status"])
+
+        return jsonify(progLevel["status"])
 
     return jsonify({})
 
@@ -313,14 +344,17 @@ def index():
     global retrieved
     retrieved = []
 
+    global keysList
+    keysList = []
+
     global selectedProp
-    selectedProp = None
+    selectedProp = [{}]
 
     global databaseInfo
     databaseInfo = None
 
     global toUpdate
-    toUpdate = None
+    toUpdate = []
 
     global progLevel
     progLevel = {"value": 0, "target": 0, "status": "idle"}
@@ -342,7 +376,8 @@ def progress():
 
 @app.route('/file', methods=('GET', 'POST'))
 def file():
-    # global rowNames
+
+    global keysList
 
     fpath = "Murano Names.xlsx"
 
@@ -351,13 +386,10 @@ def file():
         return jsonify(False)
         
     fileDf = pd.read_excel(fpath)
-    namesList = fileDf.iloc[:, 0].tolist()
-    namesList = [name for name in namesList[:1] if name.strip() != ""]
-    # print("Total non-empty names ")
+    keysList = fileDf.iloc[:, 0].tolist()
+    keysList = [name for name in keysList[:] if name.strip() != ""]
 
-    # rowNames = namesList
-
-    return jsonify(namesList)
+    return jsonify(keysList)
 
 if __name__ == '__main__':
   app.run(host='0.0.0.0', port=5000)
