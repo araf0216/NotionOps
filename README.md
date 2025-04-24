@@ -2,7 +2,7 @@
 
 ## Overview
 
-Interactive single-page application (SPA) designed to automate custom, large-scale updates to Notion databases.
+Full-stack interactive single-page application (SPA) designed to automate custom, large-scale updates to Notion databases.
 
 ## Features
 
