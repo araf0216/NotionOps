@@ -104,7 +104,7 @@ input[type=number]:focus {
   margin: 20px auto;
   background: #191919; /* Optional, or remove if your page is already #191919 */
 }
-  
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

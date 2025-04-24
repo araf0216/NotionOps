@@ -144,6 +144,8 @@ def notionOps(op, intkey, dbKey=None):
             valuesList = fileDf.iloc[:len(keysList), 1].tolist()
 
             map = {key: value.strftime("%Y-%m-%d") for key, value in zip(keysList, valuesList)}
+            # duplicate each key-value pair to allow for case-insensitive search
+            map.update({key.lower(): value for key, value in map.items()})
 
             # print(map)
             # return "failed"
@@ -186,7 +188,9 @@ def notionOps(op, intkey, dbKey=None):
                         }
                         
                     case "map":
-                        val = map[res["properties"]["Name"]["title"][0]["text"]["content"]]
+                        val = res["properties"]["Name"]["title"][0]["text"]["content"]
+                        # if exact name not accounted for in mappings, fall-back to case-insensitive name search
+                        val = map[val] if val in map else map[val.lower()]
                         val = {
                             "date": {
                                 "start": val
