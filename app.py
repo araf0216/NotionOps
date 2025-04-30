@@ -125,6 +125,7 @@ def notionOps(op, intkey, dbKey=None):
     def updateDb():
         print("update action triggered")
 
+        global selectedDB
         global retrieved
         global selectedProp
         global toUpdate
@@ -135,15 +136,57 @@ def notionOps(op, intkey, dbKey=None):
         
         global keysList
         map = {}
+
+        cache = {}
+        def valTransformer(val, typ):
+            match typ:
+                case "date":
+                    return val.strftime("%Y-%m-%d")
+
+                case "relation":
+                    if cache != {}:
+                        return cache["id"]
+                    
+                    cache["type"] = "Name"
+                    cache["typeVal"] = val
+
+                    headers = {
+                        "Authorization": "Bearer " + intkey,
+                        "Content-Type": "application/json",
+                        "Notion-Version": "2022-06-28",
+                    }
+
+                    payload = {
+                        "filter": {
+                            "property": cache["type"],
+                            "title": {
+                                "equals": cache["typeVal"]
+                            }
+                        }
+                    }
+
+                    queUrl = "https://api.notion.com/v1/databases/" + selectedDB["db"] + "/query"
+
+                    queryRel = requests.post(queUrl, headers=headers, json=payload).json()
+
+                    cache["id"] = queryRel["results"][0]["id"]
+
+                    return cache["id"]
+
         if "map" in toUpdate:
             fpath = "Murano Names.xlsx"
 
             fileDf = pd.read_excel(fpath)
+            # fileDf = pd.read_excel(fpath, sheet_name=3)
+
+            if keysList == []:
+                keysList = fileDf.iloc[:, 0].tolist()
+                keysList = [name for name in keysList[:] if name.strip() != ""]
 
             # future extension - user selects which property is key and which is value
             valuesList = fileDf.iloc[:len(keysList), 1].tolist()
 
-            map = {key: value.strftime("%Y-%m-%d") for key, value in zip(keysList, valuesList)}
+            map = {key: value for key, value in zip(keysList, valuesList)}
             # duplicate each key-value pair to allow for case-insensitive search
             map.update({key.lower(): value for key, value in map.items()})
 
@@ -176,36 +219,49 @@ def notionOps(op, intkey, dbKey=None):
             }
 
             for prop, val in zip(selectedProp, toUpdate):
-                match val:
-                    case "checked":
+                
+                # check update is uniform vs. mapped to apply necessary formatting
+                if val == "map":
+                    val = res["properties"]["Name"]["title"][0]["text"]["content"]
+                    val = map[val] if val in map else map[val.lower()]
+
+                match prop["type"]:
+
+                    # type checkbox - only uniform atm
+                    case "checkbox":
                         val = {
-                            "checkbox": True
+                            "checkbox": val == "checked"
                         }
-                        
-                    case "unchecked":
-                        val = {
-                            "checkbox": False
-                        }
-                        
-                    case "map":
-                        val = res["properties"]["Name"]["title"][0]["text"]["content"]
-                        # if exact name not accounted for in mappings, fall-back to case-insensitive name search
-                        val = map[val] if val in map else map[val.lower()]
+
+                    # type date - only mapped atm
+                    case "date":
                         val = {
                             "date": {
-                                "start": val
+                                "start": valTransformer(val, "date")
                             }
+                        }
+                    
+                    # type number - only mapped atm
+                    case "number":
+                        val = {
+                            "number": val
+                        }
+                    
+                    # type relation - only uniform, current DB atm
+                    case "relation":
+                        val = {
+                            "relation": [
+                                {
+                                    "id": valTransformer(val, "relation")
+                                }
+                            ]
                         }
 
                 properties["properties"][prop["prop"]] = val
 
             res = requests.patch(rowUrl, headers=headers, json=properties).json()
-
-            if res == {}:
-                print(res)
-                return "failed"
             
-            if res["object"] == "error":
+            if res == {} or res["object"] == "error":
                 print(res)
                 return "failed"
 
@@ -307,11 +363,12 @@ def api():
 
         value = request.get_json()
         toUpdate.append(value["value"])
+
+        # if submitted prop is not final, return to selection of next prop
         if value["final"] != None and value["final"] == False:
             print("Prop select continues")
             selectedProp.append({})
             return jsonify("anotha one")
-        # print(f"Selected update to the property {toUpdate}<{selectedProp["type"]}>")
 
         # compartmentalized executer of the actual update operation
         def updateTask():
@@ -384,12 +441,14 @@ def file():
     global keysList
 
     fpath = "Murano Names.xlsx"
+    # fpath = "Murano AUMs.xlsx"
 
     if not os.path.exists(fpath):
         print("no such file exists")
         return jsonify(False)
         
     fileDf = pd.read_excel(fpath)
+    # fileDf = pd.read_excel(fpath, sheet_name=3)
     keysList = fileDf.iloc[:, 0].tolist()
     keysList = [name for name in keysList[:] if name.strip() != ""]
 

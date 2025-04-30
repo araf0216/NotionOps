@@ -25,6 +25,7 @@
     // loading indicator element
     const loader = document.createElement("div");
     loader.classList.add("loader");
+    const lineBr = document.createElement("br");
 
     async function progressTracker(message, messageElem) {
       const finalStatus = await new Promise((resolve, reject) => {
@@ -104,11 +105,39 @@
 
     }
 
+    async function selectFilterMethod(centerDiv) {
+
+      return new Promise( async (resolve) => {
+
+        const conditionalBtn = document.createElement("button");
+        conditionalBtn.innerHTML = "Filter by Conditions";
+        conditionalBtn.classList.add("primaryButton");
+
+        const matchBtn = document.createElement("button");
+        matchBtn.innerHTML = "Filter by Exact Matches";
+        matchBtn.classList.add("primaryButton");
+
+        centerDiv.appendChild(conditionalBtn);
+        centerDiv.appendChild(matchBtn);
+
+      });
+
+    }
+
     async function submitDBRows(intKey, dbName, dbKey) {
       try {
         // set temporary loading state
         const centerDiv = document.getElementById("center");
         centerDiv.replaceChildren();
+
+        // await selectProp(centerDiv, "retrieve");
+
+        // select filtering method
+        const method = await selectFilterMethod(centerDiv);
+        
+        if (method == "") {
+          return;
+        }
 
         const rows = await selectRows(centerDiv, dbName);
         console.log(rows);
@@ -151,7 +180,7 @@
 
     async function selectRows(centerDiv, dbName) {
 
-      return new Promise((resolve) => {
+      return new Promise(async (resolve) => {
         centerDiv.replaceChildren();
 
         const stickyElem = document.createElement("div");
@@ -183,6 +212,8 @@
         addPreset.classList.add("primaryButton");
         addPreset.textContent = 'Add Murano Preset';
         addPreset.onclick = async () => {
+          rowElems.replaceChildren();
+          rowElems.appendChild(loader);
           var presetUrl = '{{ url_for("file") }}';
           var presetRes = await fetch(presetUrl, {
             method: "GET"
@@ -319,7 +350,7 @@
 
     }
 
-    async function selectProp(centerDiv) {
+    async function selectProp(centerDiv, opStage="update") {
       headers = {"Content-Type": "application/json"};
       const apiUrl = '{{ url_for("api") }}';
 
@@ -333,12 +364,31 @@
 
       centerDiv.replaceChildren();
       const propElems = document.createElement("div");
+
       // prepare loaded data
       var buttonElems = "";
+      async function submitRetrievalProp(prop, type) {
+        if (type !== "rich_text" && type !== "select") {
+          console.log("Currently Only Supporting Retrieval via Text & Select Property Types");
+          return;
+        }
+
+        try {
+          console.log("Property " + prop + " " + type + " selected for retrieval filter");
+        } catch (error) {
+          console.error("Error during get Prop (R Stage):", error);
+        }
+      }
+
       for (let propData of api_data) {
         let prop = Object.keys(propData)[0];
         let propInfo = propData[prop];
-        buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
+        if (opStage == "update") {
+          buttonElems += "<button class='primaryButton' onclick='submitProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
+        } else if (propInfo["type"] == "rich_text" || propInfo["type"] == "select") {
+          buttonElems += "<button class='primaryButton' onclick='submitRetrievalProp(\"" + prop + "\", \"" + propInfo["type"] + "\")'>" + prop + "</button>";
+        }
+        
       }
 
       // set page with loaded data
@@ -347,8 +397,8 @@
     }
 
     async function submitProp(prop, type) {
-      if (type !== "checkbox" && type !== "date") {
-        console.log("Currently Only Supporting Checkbox & Date Property Types");
+      if (type !== "checkbox" && type !== "date" && type !== "number" && type !== "relation") {
+        console.log("Currently Only Supporting Checkbox, Date, Number, & Relation Property Types");
         return;
       }
 
@@ -375,6 +425,10 @@
           checkboxSelected();
         } else if (type == "date") {
           dateSelected();
+        } else if (type == "number") {
+          numberSelected();
+        } else if (type == "relation") {
+          relationSelected();
         }
 
         async function checkboxSelected() {
@@ -421,8 +475,98 @@
           centerDiv.appendChild(indiMapped);
         }
 
+        async function numberSelected() {
+          const applyUniform = document.createElement("button");
+          applyUniform.classList.add("primaryButton");
+          applyUniform.innerHTML = "Apply Uniformly to All";
+          applyUniform.onclick = async () => {
+            await updateSelected("select");
+            // console.log("unimplemented");
+          };
+
+          const indiMapped = document.createElement("button");
+          indiMapped.classList.add("primaryButton");
+          indiMapped.innerHTML = "Apply Individually Mapped Values";
+          indiMapped.onclick = async () => {
+            applyUniform.innerHTML = "Upload Custom Structured File";
+            indiMapped.innerHTML = "Apply Murano Preset";
+
+            indiMapped.onclick = async () => {
+              await updateSelected("map");
+            };
+          };
+
+          centerDiv.appendChild(applyUniform);
+          centerDiv.appendChild(indiMapped);
+        }
+
+        async function relationSelected() {
+          const applyUniform = document.createElement("button");
+          applyUniform.classList.add("primaryButton");
+          applyUniform.innerHTML = "Apply Uniformly to All";
+          applyUniform.onclick = async () => {
+            centerDiv.replaceChildren();
+
+            const sourcePrompt = document.createElement("h3");
+            sourcePrompt.innerHTML = "Select Source of Relation:";
+
+            const sourceThis = document.createElement("button");
+            sourceThis.classList.add("primaryButton");
+            sourceThis.innerHTML = "Current Database";
+            sourceThis.onclick = async () => {
+              centerDiv.replaceChildren();
+              
+              sourcePrompt.innerHTML = "Enter Relation Name:";
+
+              const sourceName = document.createElement("input");
+              sourceName.classList.add("primaryText");
+              sourceName.placeholder = "Enter text value";
+              
+              const sourceSubmit = document.createElement("button");
+              sourceSubmit.classList.add("primaryButton");
+              sourceSubmit.innerHTML = "Submit";
+              sourceSubmit.onclick = async () => {
+                const val = sourceName.value;
+                await updateSelected(val);
+              };
+
+              centerDiv.appendChild(sourcePrompt);
+              centerDiv.appendChild(sourceName);
+              centerDiv.appendChild(lineBr);
+              centerDiv.appendChild(sourceSubmit);
+
+            };
+
+            const sourceThisnt = document.createElement("button");
+            sourceThisnt.classList.add("primaryButton");
+            sourceThisnt.innerHTML = "Outside Current Database";
+
+            centerDiv.appendChild(sourcePrompt);
+            centerDiv.appendChild(sourceThis);
+            centerDiv.appendChild(sourceThisnt);
+
+            // await updateSelected({"type": "relation", "value": val});
+          };
+
+          const indiMapped = document.createElement("button");
+          indiMapped.classList.add("primaryButton");
+          indiMapped.innerHTML = "Apply Individually Mapped Values";
+          indiMapped.onclick = async () => {
+            applyUniform.innerHTML = "Upload Custom Structured File";
+            indiMapped.innerHTML = "Apply Murano Preset";
+
+            indiMapped.onclick = async () => {
+              await updateSelected("map");
+            };
+          };
+
+          centerDiv.appendChild(applyUniform);
+          centerDiv.appendChild(indiMapped);
+        }
+
         async function updateSelected(value) {
           // prop and type are both available here - remember!
+
           centerDiv.replaceChildren();
           
           const confirmMessage = document.createElement("h3");
@@ -519,7 +663,7 @@
         }
 
       } catch (error) {
-        console.error("Error during get Prop:", error);
+        console.error("Error during get Prop (U Stage):", error);
       }
     }
   </script>
